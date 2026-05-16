@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude MCP Eval Takeaways</title>
+  <style>
+    :root {
+      --bg: #f7f8fc;
+      --bg-soft: #fdfaf6;
+      --bg-panel: rgba(255,255,255,0.88);
+      --bg-panel-strong: rgba(255,255,255,0.96);
+      --border: rgba(114, 122, 145, 0.16);
+      --border-strong: rgba(114, 122, 145, 0.28);
+      --text: #263247;
+      --text-soft: #5f6b82;
+      --text-faint: #7b879a;
+      --indigo: #5d6bff;
+      --indigo-soft: #eef0ff;
+      --blue: #dff2ff;
+      --teal: #0fb5ad;
+      --teal-soft: #d6f3f1;
+      --violet: #8b5cf6;
+      --violet-soft: #ede5ff;
+      --rose: #f1e6ff;
+      /* legacy aliases mapped to the new palette */
+      --olive: #0fb5ad;
+      --olive-soft: #d6f3f1;
+      --orange: #8b5cf6;
+      --orange-soft: #ede5ff;
+      --shadow: 0 24px 70px rgba(70, 84, 122, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(169, 224, 255, 0.38), transparent 28%),
+        radial-gradient(circle at top right, rgba(241, 183, 255, 0.20), transparent 24%),
+        linear-gradient(180deg, #fafbfd 0%, #f6f0e9 100%);
+    }
+
+    body { padding: 14px 18px; }
+    .shell { max-width: 1360px; margin: 0 auto; display: grid; gap: 12px; }
+
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding: 6px 2px 2px; animation: fadeUp .5s ease;
+    }
+
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px;
+      border-radius: 999px; background: var(--indigo-soft); color: #5160ef;
+      font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      border: 1px solid rgba(93, 107, 255, 0.14);
+    }
+
+    .controls { display: flex; align-items: center; gap: 10px; }
+    .button {
+      border: 1px solid var(--border); background: rgba(255,255,255,0.95); color: var(--text);
+      border-radius: 999px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+      box-shadow: 0 6px 24px rgba(70,84,122,0.06);
+    }
+    .button:hover, .button:focus-visible {
+      transform: translateY(-1px); background: #fff; border-color: var(--border-strong); outline: none;
+    }
+    .button.primary {
+      background: #eef0ff; color: #4857ea; border-color: rgba(93, 107, 255, 0.18);
+    }
+
+    .deck {
+      position: relative; width: 100%; height: calc(100vh - 90px); min-height: 540px; max-height: 880px; border-radius: 22px;
+      overflow: hidden; border: 1px solid rgba(96, 107, 141, 0.10); box-shadow: var(--shadow);
+      background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.94));
+      animation: fadeUp .65s ease .05s both;
+    }
+
+    .slide {
+      position: absolute; inset: 0; padding: 28px 36px 22px; opacity: 0; pointer-events: none;
+      transform: translateX(28px) scale(0.985); transition: opacity .45s ease, transform .45s ease;
+      display: grid; grid-template-rows: auto 1fr auto; gap: 12px;
+      overflow: auto;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.98), rgba(250,245,239,0.95)),
+        linear-gradient(180deg, #ffffff 0%, #fcfaf7 100%);
+    }
+    .slide::-webkit-scrollbar { width: 0; height: 0; }
+    .slide.active { opacity: 1; pointer-events: auto; transform: translateX(0) scale(1); }
+
+    .slide-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+    .kicker {
+      font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--text-faint); margin-bottom: 12px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(28px, 3.4vw, 44px); line-height: 1.0; letter-spacing: -0.035em; max-width: 900px; }
+    h2 { font-size: clamp(24px, 2.8vw, 36px); line-height: 1.05; letter-spacing: -0.03em; max-width: 900px; }
+    .subtitle {
+      font-size: 14px; line-height: 1.45; color: var(--text-soft); max-width: 780px; margin-top: 8px;
+    }
+    .page-no {
+      font-size: 13px; font-weight: 700; color: var(--text-soft); padding: 6px 12px; border-radius: 999px;
+      background: rgba(255,255,255,0.92); border: 1px solid var(--border); backdrop-filter: blur(10px);
+      white-space: nowrap;
+    }
+
+    .hero-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 28px; align-items: end; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .chip {
+      padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,0.92); border: 1px solid var(--border);
+      font-size: 12px; color: var(--text-soft); font-weight: 600;
+    }
+
+    .hero-panel, .card, .quote, .mini-panel {
+      border-radius: 24px; background: var(--bg-panel); border: 1px solid var(--border); backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(70, 84, 122, 0.04);
+    }
+
+    .hero-panel { padding: 18px; min-height: 0; position: relative; overflow: hidden; }
+    .hero-panel::before {
+      content: ""; position: absolute; inset: auto -60px -70px auto; width: 220px; height: 220px;
+      background: radial-gradient(circle, rgba(93,107,255,0.10), transparent 65%);
+    }
+
+    .ring {
+      width: 180px; height: 180px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center;
+      background: conic-gradient(var(--indigo) 0 42%, var(--teal) 42% 68%, var(--violet) 68% 86%, rgba(93,107,255,0.14) 86% 100%);
+      box-shadow: inset 0 0 0 18px rgba(255,255,255,0.96);
+    }
+    .ring-inner {
+      width: 116px; height: 116px; border-radius: 50%; background: #fff; display: grid; place-items: center;
+      text-align: center; padding: 20px; border: 1px solid rgba(93,107,255,0.08);
+    }
+    .ring-inner strong { display: block; font-size: 28px; line-height: 1; letter-spacing: -0.04em; color: var(--text); }
+    .ring-inner span { color: var(--text-soft); font-size: 11px; line-height: 1.3; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: stretch; }
+    .card { padding: 14px; }
+    .stat-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--text-faint); margin-bottom: 6px;
+    }
+    .stat-value { font-size: clamp(22px, 2.4vw, 32px); font-weight: 800; letter-spacing: -0.04em; line-height: .95; margin-bottom: 6px; }
+    .stat-note { color: var(--text-soft); line-height: 1.4; font-size: 12px; }
+
+    .token-block { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+    .chart-card {
+      padding: 16px; border-radius: 24px; background: var(--bg-panel); border: 1px solid var(--border);
+      box-shadow: 0 10px 30px rgba(70,84,122,0.04);
+    }
+    .bars { margin-top: 18px; display: grid; gap: 16px; }
+    .bar-row { display: grid; grid-template-columns: 140px 1fr 70px; gap: 14px; align-items: center; font-size: 14px; }
+    .bar-label { color: var(--text-soft); font-weight: 600; }
+    .bar-track { height: 20px; background: rgba(93,107,255,0.08); border-radius: 999px; overflow: hidden; position: relative; }
+    .bar-fill { height: 100%; border-radius: 999px; }
+    .bar-fill.glean { background: linear-gradient(90deg, var(--indigo), #7f8bff); }
+    .bar-fill.ots { background: linear-gradient(90deg, var(--violet), #b69bff); }
+    .bar-num { font-weight: 700; text-align: right; color: var(--text); }
+
+    .comparison-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 18px; align-items: stretch; }
+    .stack { display: grid; gap: 14px; align-content: stretch; }
+    .mini-panel { padding: 16px 18px; }
+    .mini-panel h3 { font-size: 17px; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .mini-panel p, .mini-panel li { color: var(--text-soft); line-height: 1.45; font-size: 14px; }
+    .mini-panel ul { margin: 8px 0 0 18px; padding: 0; display: grid; gap: 6px; }
+
+    .diagram { padding: 18px; position: relative; overflow: hidden; }
+    .diagram-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; margin-top: 12px; }
+    .path {
+      border-radius: 20px; padding: 18px; min-height: 100%; display: grid; gap: 10px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.74);
+    }
+    .path.bad { background: linear-gradient(180deg, rgba(255,240,231,0.88), rgba(255,255,255,0.96)); }
+    .path.good { background: linear-gradient(180deg, rgba(238,246,212,0.90), rgba(255,255,255,0.96)); }
+    .step {
+      padding: 11px 14px; border-radius: 14px; background: rgba(255,255,255,0.98); border: 1px solid var(--border);
+      font-size: 13px; line-height: 1.45; color: var(--text-soft);
+    }
+    .step strong { color: var(--text); display: block; margin-bottom: 3px; font-size: 13px; }
+    .arrow {
+      width: 36px; height: 36px; border-radius: 50%; background: #eef0ff; color: #5160ef; display: grid; place-items: center;
+      font-size: 18px; font-weight: 700; border: 1px solid rgba(93,107,255,0.16);
+    }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: stretch; }
+    .metric-row { display: grid; gap: 12px; margin-top: 14px; }
+    .metric-card {
+      padding: 22px 24px; border-radius: 18px; background: rgba(255,255,255,0.98); border: 1px solid var(--border);
+      display: flex; justify-content: space-between; gap: 18px; align-items: baseline;
+    }
+    .metric-card .label { font-size: 16px; color: var(--text-soft); font-weight: 600; }
+    .metric-card .value { font-size: 46px; font-weight: 800; letter-spacing: -0.05em; }
+
+    .quote { padding: 22px; display: grid; gap: 12px; background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(247,250,255,0.92)); }
+    .quote-text { font-size: 21px; line-height: 1.35; letter-spacing: -0.02em; max-width: 560px; color: var(--text); }
+    .quote-mark { font-size: 48px; line-height: .7; color: rgba(93,107,255,0.18); }
+
+    .category-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; align-items: stretch; }
+    .split .category-grid { grid-template-columns: 1fr; gap: 8px; margin-top: 12px; align-content: stretch; }
+    .split .cat { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 14px; padding: 14px 18px; }
+    .split .cat strong { font-size: 16px; margin-bottom: 0; }
+    .split .cat span { font-size: 13px; line-height: 1.45; }
+    .cat {
+      padding: 14px 12px; border-radius: 14px; background: rgba(255,255,255,0.96); border: 1px solid var(--border); min-height: 100%;
+    }
+    .cat strong { display: block; font-size: 13px; line-height: 1.25; margin-bottom: 6px; color: var(--text); }
+    .cat span { color: var(--text-soft); font-size: 12px; line-height: 1.4; }
+
+    .takeaways { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: stretch; }
+    .takeaway-list { display: grid; gap: 10px; margin-top: 8px; }
+    .takeaway {
+      display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start; padding: 14px 16px;
+      border-radius: 14px; background: rgba(255,255,255,0.98); border: 1px solid var(--border);
+    }
+    .takeaway-index {
+      width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--indigo-soft);
+      color: #4b5af0; font-weight: 800; border: 1px solid rgba(93,107,255,0.12); font-size: 16px;
+    }
+    .takeaway h3 { font-size: 16px; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .takeaway p { color: var(--text-soft); line-height: 1.45; font-size: 13px; }
+
+    .footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .progress-wrap { display: flex; align-items: center; gap: 14px; width: 100%; }
+    .progress { flex: 1; height: 8px; border-radius: 999px; background: rgba(93,107,255,0.08); overflow: hidden; }
+    .progress-fill { height: 100%; width: 20%; background: linear-gradient(90deg, var(--indigo), var(--violet)); border-radius: 999px; transition: width .35s ease; }
+    .slide-title { font-size: 14px; color: var(--text-soft); font-weight: 600; min-width: 140px; text-align: right; }
+    .dotbar { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(93,107,255,0.18); transition: transform .2s ease, background .2s ease; }
+    .dot.active { background: var(--indigo); transform: scale(1.25); }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; color: var(--text-soft); font-size: 13px; }
+    .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+    .legend .l1::before { background: var(--indigo); }
+    .legend .l2::before { background: var(--violet); }
+    .legend .l3::before { background: var(--teal); }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 1100px) {
+      body { padding: 18px; }
+      .deck { min-height: 560px; }
+      .slide { padding: 36px; }
+      .hero-grid, .comparison-grid, .split, .takeaways, .token-block { grid-template-columns: 1fr; }
+      .stats-grid, .category-grid { grid-template-columns: 1fr 1fr; }
+      .diagram-grid { grid-template-columns: 1fr; }
+      .arrow { display: none; }
+    }
+
+    @media (max-width: 760px) {
+      .stats-grid, .category-grid { grid-template-columns: 1fr; }
+      .topbar, .footer { flex-direction: column; align-items: stretch; }
+      .controls { justify-content: space-between; }
+      .slide-title { text-align: left; }
+      .deck { height: auto; min-height: 0; max-height: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  
+    /* ---- Dynamic / hover interactions ---- */
+    .card, .mini-panel, .hero-panel, .takeaway, .cat, .metric-card, .quote, .chart-card, .diagram, .path {
+      transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease, border-color .35s ease, background .35s ease;
+    }
+    .card:hover, .mini-panel:hover, .takeaway:hover, .cat:hover, .metric-card:hover, .chart-card:hover, .quote:hover, .path:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 22px 48px rgba(70, 84, 122, 0.12);
+      border-color: rgba(93, 107, 255, 0.28);
+    }
+    .hero-panel:hover { transform: translateY(-3px); box-shadow: 0 22px 48px rgba(70, 84, 122, 0.10); }
+    .chip { transition: transform .25s ease, background .25s ease, color .25s ease, border-color .25s ease; }
+    .chip:hover { transform: translateY(-2px); background: var(--indigo-soft); color: #4857ea; border-color: rgba(93, 107, 255, 0.25); }
+    .step { transition: transform .3s ease, background .3s ease, box-shadow .3s ease; }
+    .step:hover { transform: translateX(4px); background: rgba(255,255,255,1); box-shadow: 0 8px 18px rgba(70, 84, 122, 0.08); }
+    .ring { transition: transform .5s cubic-bezier(.2,.8,.2,1), filter .35s ease; }
+    .ring:hover { transform: rotate(3deg) scale(1.025); filter: saturate(1.05); }
+    .dot { cursor: pointer; transition: transform .25s ease, background .25s ease; }
+    .dot:hover { transform: scale(1.45); background: var(--indigo); }
+    .bar-fill { transition: filter .35s ease, transform .35s ease; transform-origin: left center; }
+    .bar-track:hover .bar-fill { filter: brightness(1.08) saturate(1.05); transform: scaleX(1.01); }
+    .takeaway-index { transition: transform .3s ease, background .3s ease, color .3s ease; }
+    .takeaway:hover .takeaway-index { transform: rotate(-6deg) scale(1.08); background: var(--indigo); color: #ffffff; }
+    .stat-value { transition: transform .35s cubic-bezier(.2,.8,.2,1), letter-spacing .35s ease; }
+    .card:hover .stat-value, .metric-card:hover .value { transform: translateY(-2px); letter-spacing: -0.055em; }
+    .button { transition: transform .25s ease, background .25s ease, border-color .25s ease, box-shadow .25s ease; }
+    .button:hover { box-shadow: 0 10px 22px rgba(70, 84, 122, 0.10); }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
+
+  
+    .split .hero-panel { padding: 24px; display: grid; align-content: stretch; gap: 14px; }
+    .split .metric-row { gap: 14px; }
+</style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="eyebrow">Claude Cowork Eval · 5-page summary</div>
+      <div class="controls interactive-only">
+        <button class="button" id="prevBtn" aria-label="Previous slide">← Prev</button>
+        <button class="button primary" id="nextBtn" aria-label="Next slide">Next →</button>
+      </div>
+    </div>
+
+    <section class="deck" aria-label="Presentation deck">
+      <article class="slide active" data-title="Overview">
+        <div class="slide-header">
+          <div>
+            <div class="kicker">Page 1 · The eval at a glance</div>
+            <h1>Glean MCP vs. off-the-shelf MCP, inside Claude Cowork.</h1>
+            <p class="subtitle">Glean's first public benchmark on Claude Cowork. We isolated for context by holding the harness and model constant — Claude Sonnet 4.6 — and swapped only the context layer behind MCP across roughly 175 real enterprise queries.</p>
+            <div class="chips">
+              <div class="chip">~175 Cowork-style queries</div>
+              <div class="chip">Claude Sonnet 4.6 · same harness</div>
+              <div class="chip">5-point preference scale · 4 metrics</div>
+              <div class="chip">Published May 13, 2026</div>
+            </div>
+          </div>
+          <div class="page-no">1 / 5</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.15fr 1fr; gap:14px; align-items:stretch;">
+          <div class="hero-panel">
+            <div class="kicker">How we ran it</div>
+            <div style="display:grid; gap:6px; margin-top:4px;">
+              <div class="step"><strong>The setup</strong> Claude Cowork as the harness with Claude Sonnet 4.6 as the default model. The only variable: Glean's remote MCP server vs. off-the-shelf MCP servers (Atlassian Rovo, GitHub, Gmail, Google Calendar, Drive, Salesforce, Slack, GCP).</div>
+              <div class="step"><strong>The query mix</strong> Real Cowork-style tasks across content generation, calendar and meeting prep, inbox and communications, large-scale data analysis, and finding information.</div>
+              <div class="step"><strong>How we graded</strong> Graders scored each side-by-side pair on a 5-point preference scale across four metrics: utility, correctness, completeness, and tool fidelity.</div>
+              <div class="step"><strong>What we measured</strong> Side-by-side preference rate, total token usage per query, and how the gap shifted as task complexity increased.</div>
+            </div>
+          </div>
+
+          <div style="display:grid; gap:10px;">
+            <div class="hero-panel" style="display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:center; padding:14px;">
+              <div class="ring" style="width:170px; height:170px;">
+                <div class="ring-inner" style="width:118px; height:118px; padding:10px;">
+                  <div>
+                    <strong style="font-size:30px;">2.5×</strong>
+                    <span style="font-size:11px; line-height:1.25;">preferred over off-the-shelf MCP</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div class="kicker" style="margin-bottom:6px;">Headline result</div>
+                <h3 style="font-size:18px; letter-spacing:-0.02em; line-height:1.2;">Better answers at materially lower token cost.</h3>
+                <p style="margin-top:6px; color:var(--text-soft); font-size:12px; line-height:1.4;">
+                  Same model. Same harness. The context layer alone shifted both quality and economics.
+                </p>
+              </div>
+            </div>
+
+            <div class="stats-grid" style="grid-template-columns:1fr 1fr; gap:8px;">
+              <div class="card" style="padding:12px;">
+                <div class="stat-label">Avg. token burn</div>
+                <div class="stat-value" style="font-size:28px; color:var(--violet);">+30%</div>
+                <div class="stat-note" style="font-size:13px;">Off-the-shelf MCP used roughly 30% more tokens on average per query.</div>
+              </div>
+              <div class="card" style="padding:18px;">
+                <div class="stat-label">Correctness-matched cost</div>
+                <div class="stat-value" style="font-size:26px; color:var(--teal);">83k vs 43k</div>
+                <div class="stat-note" style="font-size:13px;">Tokens needed for a comparably correct answer — nearly 2×.</div>
+              </div>
+              <div class="card" style="padding:18px;">
+                <div class="stat-label">Glean's stable range</div>
+                <div class="stat-value" style="font-size:26px; color:var(--indigo);">~42k–44k</div>
+                <div class="stat-note" style="font-size:13px;">Glean's token usage stayed flat regardless of outcome quality.</div>
+              </div>
+              <div class="card" style="padding:18px;">
+                <div class="stat-label">Win rate on complex tasks</div>
+                <div class="stat-value" style="font-size:28px; color:var(--indigo);">73%</div>
+                <div class="stat-note" style="font-size:13px;">Up from 66% on simpler tasks — the gap widens with complexity.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="progress-wrap">
+            <div class="progress"><div class="progress-fill" style="width:20%;"></div></div>
+            <div class="slide-title">What we tested &amp; why</div>
+          </div>
+          <div class="dotbar">
+            <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-title="Headline results">
+        <div class="slide-header">
+          <div>
+            <div class="kicker">Page 2</div>
+            <h2>The topline: better quality at lower cost.</h2>
+            <p class="subtitle">The public story is simple and compelling: Glean won on preference while off-the-shelf MCP paid a token tax.</p>
+          </div>
+          <div class="page-no">2 / 5</div>
+        </div>
+
+        <div>
+          <div class="stats-grid">
+            <div class="card">
+              <div class="stat-label">Preference</div>
+              <div class="stat-value" style="color:var(--indigo);">~2.5×</div>
+              <div class="stat-note">Glean was preferred about two and a half times as often as off-the-shelf MCP tools.</div>
+            </div>
+            <div class="card">
+              <div class="stat-label">Average token usage</div>
+              <div class="stat-value" style="color:var(--violet);">+30%</div>
+              <div class="stat-note">Off-the-shelf MCP tools consumed roughly 30% more tokens on average.</div>
+            </div>
+            <div class="card">
+              <div class="stat-label">When OTS produced a correct answer</div>
+              <div class="stat-value" style="color:var(--teal);">83k vs 43k</div>
+              <div class="stat-note">Off-the-shelf MCP brute-forced its way to correctness — nearly double Glean's tokens.</div>
+            </div>
+          </div>
+
+          <div class="token-block">
+            <div class="chart-card">
+              <div class="kicker">Token comparison</div>
+              <h3 style="font-size:24px; letter-spacing:-0.03em;">Cost to get to a correct answer</h3>
+              <div class="bars">
+                <div class="bar-row">
+                  <div class="bar-label">Glean</div>
+                  <div class="bar-track"><div class="bar-fill glean" style="width:52%;"></div></div>
+                  <div class="bar-num">43k</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label">Off-the-shelf MCP</div>
+                  <div class="bar-track"><div class="bar-fill ots" style="width:80%;"></div></div>
+                  <div class="bar-num">83k</div>
+                </div>
+              </div>
+              <div class="legend">
+                <span class="l1">Glean remote MCP</span>
+                <span class="l2">Off-the-shelf MCP tools</span>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="kicker">Reading the numbers</div>
+              <h3 style="font-size:18px; letter-spacing:-0.025em; max-width:420px; line-height:1.2;">Token usage stayed flat for Glean, and spiked for off-the-shelf MCP when the work got harder.</h3>
+              <div style="display:grid; gap:8px; margin-top:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,0.86); border:1px solid var(--border);">
+                  <div style="font-size:13px; color:var(--text-soft); font-weight:600;">Glean token range</div>
+                  <div style="font-size:18px; font-weight:800; color:var(--indigo); letter-spacing:-0.02em;">~42k – 44k</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,0.86); border:1px solid var(--border);">
+                  <div style="font-size:13px; color:var(--text-soft); font-weight:600;">Off-the-shelf, when correct</div>
+                  <div style="font-size:18px; font-weight:800; color:var(--violet); letter-spacing:-0.02em;">~83k</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,0.86); border:1px solid var(--border);">
+                  <div style="font-size:13px; color:var(--text-soft); font-weight:600;">Median per query</div>
+                  <div style="font-size:18px; font-weight:800; color:var(--text); letter-spacing:-0.02em;">44k vs 57k</div>
+                </div>
+              </div>
+              <p style="margin-top:14px; color:var(--text-soft); font-size:14px; line-height:1.5;">
+                Glean's cost stayed predictable across simple and complex queries. Off-the-shelf MCP burned roughly 2× the tokens whenever it had to compensate for weaker context.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="progress-wrap">
+            <div class="progress"><div class="progress-fill" style="width:40%;"></div></div>
+            <div class="slide-title">What the numbers say</div>
+          </div>
+          <div class="dotbar">
+            <div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-title="Why Glean won">
+        <div class="slide-header">
+          <div>
+            <div class="kicker">Page 3</div>
+            <h2>MCP standardizes access. It does not solve context.</h2>
+            <p class="subtitle">The core takeaway from the eval is architectural: protocol parity does not mean context parity.</p>
+          </div>
+          <div class="page-no">3 / 5</div>
+        </div>
+
+        <div class="comparison-grid">
+          <div class="stack">
+            <div class="mini-panel">
+              <h3>What breaks in a federated-only setup</h3>
+              <ul>
+                <li>Each tool has different retrieval quality, ranking behavior, and result shape.</li>
+                <li>The model has to normalize and synthesize across siloed outputs on its own.</li>
+                <li>More tool calls and more reasoning loops create latency and token waste.</li>
+                <li>Cross-application signals are weak or absent, so relevance degrades.</li>
+              </ul>
+            </div>
+            <div class="mini-panel">
+              <h3>Why Glean performs better</h3>
+              <ul>
+                <li>Centralized indexes and knowledge graph create a unified view of enterprise context.</li>
+                <li>Ranking is more consistent across sources, not dependent on connector-by-connector defaults.</li>
+                <li>Less over-fetching means more stable token use and cleaner model attention.</li>
+                <li>MCP becomes a distribution layer for high-quality context, not a substitute for it.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="diagram hero-panel">
+            <div class="kicker">Two operating models</div>
+            <div class="diagram-grid">
+              <div class="path bad">
+                <h3 style="font-size:17px; letter-spacing:-0.02em;">Off-the-shelf MCP</h3>
+                <div class="step"><strong>Step 1</strong> Query tools one by one, each with its own defaults and limits.</div>
+                <div class="step"><strong>Step 2</strong> Over-fetch documents and threads to compensate for weak retrieval.</div>
+                <div class="step"><strong>Step 3</strong> Spend extra reasoning loops stitching context together.</div>
+                <div class="step"><strong>Result</strong> Higher token use, inconsistent relevance, more editing.</div>
+              </div>
+              <div class="arrow">→</div>
+              <div class="path good">
+                <h3 style="font-size:17px; letter-spacing:-0.02em;">Glean context layer</h3>
+                <div class="step"><strong>Step 1</strong> Pull from a centralized, permissions-aware index and graph.</div>
+                <div class="step"><strong>Step 2</strong> Rank across sources using shared enterprise signals.</div>
+                <div class="step"><strong>Step 3</strong> Return better-grounded context with fewer loops.</div>
+                <div class="step"><strong>Result</strong> More work-ready outputs at lower and steadier token cost.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="progress-wrap">
+            <div class="progress"><div class="progress-fill" style="width:60%;"></div></div>
+            <div class="slide-title">Why the gap exists</div>
+          </div>
+          <div class="dotbar">
+            <div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-title="Complexity matters">
+        <div class="slide-header">
+          <div>
+            <div class="kicker">Page 4</div>
+            <h2>The advantage widens as work gets more complex.</h2>
+            <p class="subtitle">The eval shows the context layer matters more—not less—when tasks span more steps, sources, and actions.</p>
+          </div>
+          <div class="page-no">4 / 5</div>
+        </div>
+
+        <div class="split">
+          <div class="hero-panel">
+            <div class="kicker">Complexity effect</div>
+            <div class="metric-row">
+              <div class="metric-card">
+                <div class="label">Win rate on simpler tasks</div>
+                <div class="value" style="color:var(--indigo);">66%</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Win rate as complexity increased</div>
+                <div class="value" style="color:var(--teal);">73%</div>
+              </div>
+            </div>
+
+            <div class="quote" style="margin-top:18px;">
+              <div class="quote-mark">“</div>
+              <div class="quote-text">
+                Well-designed context becomes increasingly important as work requires more steps and more sources to complete.
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-panel">
+            <div class="kicker">Task types covered</div>
+            <h3 style="font-size:22px; letter-spacing:-0.02em; margin-top:4px;">The eval reflected real enterprise cowork tasks.</h3>
+            <div class="category-grid">
+              <div class="cat">
+                <strong>Content generation</strong>
+                <span>Docs, HTML, and slides accurate enough to use or share with minimal editing.</span>
+              </div>
+              <div class="cat">
+                <strong>Calendar &amp; meeting prep</strong>
+                <span>Managing calendars, prepping for meetings, and pulling in the right context.</span>
+              </div>
+              <div class="cat">
+                <strong>Inbox &amp; comms</strong>
+                <span>Drafting emails and Slack messages and synthesizing to-dos with the right tone.</span>
+              </div>
+              <div class="cat">
+                <strong>Large-scale data analysis</strong>
+                <span>Surfacing trends, predicting outcomes, and supporting cross-functional decisions.</span>
+              </div>
+              <div class="cat">
+                <strong>Finding information</strong>
+                <span>Canonical docs, owners, processes, and metric definitions across the company.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="progress-wrap">
+            <div class="progress"><div class="progress-fill" style="width:80%;"></div></div>
+            <div class="slide-title">Where context matters most</div>
+          </div>
+          <div class="dotbar">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+      <article class="slide" data-title="Summary">
+        <div class="slide-header">
+          <div>
+            <div class="kicker">Page 5 · Summary &amp; takeaways</div>
+            <h2>The story in one line: better answers, fewer tokens, on the same model.</h2>
+            <p class="subtitle">When you isolate the context layer, the gap between protocol-only access and a true enterprise context system shows up clearly in both quality and cost.</p>
+          </div>
+          <div class="page-no">5 / 5</div>
+        </div>
+
+        <div class="takeaways">
+          <div class="hero-panel">
+            <div class="kicker">Five takeaways to remember</div>
+            <div class="takeaway-list">
+              <div class="takeaway">
+                <div class="takeaway-index">1</div>
+                <div>
+                  <h3>Quality wins are real and substantial.</h3>
+                  <p>Glean was preferred ~2.5× as often across ~175 Cowork-style queries on a 5-point preference scale.</p>
+                </div>
+              </div>
+              <div class="takeaway">
+                <div class="takeaway-index">2</div>
+                <div>
+                  <h3>Token efficiency is now a CFO conversation.</h3>
+                  <p>Off-the-shelf MCP used ~30% more tokens on average. When it produced a correct answer, it consumed ~83k tokens vs Glean's ~43k.</p>
+                </div>
+              </div>
+              <div class="takeaway">
+                <div class="takeaway-index">3</div>
+                <div>
+                  <h3>The model wasn't the variable. Context was.</h3>
+                  <p>We isolated for context: same Claude Cowork harness, Claude Sonnet 4.6, same queries — only the context layer behind MCP changed.</p>
+                </div>
+              </div>
+              <div class="takeaway">
+                <div class="takeaway-index">4</div>
+                <div>
+                  <h3>The gap widens on complex work.</h3>
+                  <p>Glean's win rate climbed from 66% on simpler tasks to 73% on multi-step, cross-source work.</p>
+                </div>
+              </div>
+              <div class="takeaway">
+                <div class="takeaway-index">5</div>
+                <div>
+                  <h3>Index once. Connect everywhere.</h3>
+                  <p>Build the index and knowledge graph once, then use MCP to connect that context to every surface — Cowork, AI IDEs, and beyond.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid; gap:14px; align-content:stretch;">
+            <div class="hero-panel" style="padding:20px 22px;">
+              <h3 style="font-size:24px; line-height:1.2; letter-spacing:-0.03em;">
+                Same model. Same harness. ~2.5× preferred and ~30% fewer tokens — when the context layer was Glean.
+              </h3>
+            </div>
+
+            <div class="hero-panel" style="padding:20px 22px;">
+              <div class="kicker">The numbers in one place</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:10px;">
+                <div style="text-align:center; padding:14px 8px; border-radius:12px; background:rgba(255,255,255,0.86); border:1px solid var(--border);">
+                  <div style="font-size:24px; font-weight:800; color:var(--indigo); letter-spacing:-0.03em;">2.5×</div>
+                  <div style="font-size:11px; color:var(--text-soft); margin-top:4px; line-height:1.35;">Preference vs. off-the-shelf MCP</div>
+                </div>
+                <div style="text-align:center; padding:14px 8px; border-radius:14px; background:rgba(255,255,255,0.86); border:1px solid var(--border);">
+                  <div style="font-size:24px; font-weight:800; color:var(--violet); letter-spacing:-0.03em;">+30%</div>
+                  <div style="font-size:12px; color:var(--text-soft); margin-top:4px; line-height:1.35;">More tokens, on average</div>
+                </div>
+                <div style="text-align:center; padding:14px 8px; border-radius:14px; background:rgba(255,255,255,0.86); border:1px solid var(--border);">
+                  <div style="font-size:24px; font-weight:800; color:var(--teal); letter-spacing:-0.03em;">83 / 43</div>
+                  <div style="font-size:12px; color:var(--text-soft); margin-top:4px; line-height:1.35;">Tokens (k) when correctness matched</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:24px 26px; border-radius:22px; background:linear-gradient(135deg, rgba(93,107,255,0.18) 0%, rgba(15,181,173,0.16) 55%, rgba(139,92,246,0.16) 100%); border:1px solid rgba(93,107,255,0.20); box-shadow: 0 18px 40px rgba(70, 84, 122, 0.10);">
+              <div class="kicker" style="color:var(--indigo); margin-bottom:8px;">Bottom line</div>
+              <p style="font-size:18px; line-height:1.5; color:var(--text); font-weight:600; letter-spacing:-0.01em; margin:0;">
+                As enterprises scale AI across longer-running, multi-step work amid rising frontier model costs, the context layer becomes a direct input to both quality and economics.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="progress-wrap">
+            <div class="progress"><div class="progress-fill" style="width:100%;"></div></div>
+            <div class="slide-title">The takeaway</div>
+          </div>
+          <div class="dotbar">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      const nextBtn = document.getElementById('nextBtn');
+      const prevBtn = document.getElementById('prevBtn');
+      let current = 0;
+      function render() {
+        slides.forEach((slide, index) => slide.classList.toggle('active', index === current));
+      }
+      function next() { current = (current + 1) % slides.length; render(); }
+      function prev() { current = (current - 1 + slides.length) % slides.length; render(); }
+      nextBtn.addEventListener('click', next);
+      prevBtn.addEventListener('click', prev);
+
+      // Make pagination dots clickable as a per-slide navigator.
+      slides.forEach((slide) => {
+        const dots = slide.querySelectorAll('.dotbar .dot');
+        dots.forEach((dot, i) => {
+          dot.style.cursor = 'pointer';
+          dot.addEventListener('click', () => { current = i; render(); });
+        });
+      });
+
+      // Wire inline Prev/Next buttons inside each slide footer.
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); next(); }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+      });
+      render();
+    })();
+
+    window.GleanBridge?.postMessage?.({
+      actionId: 'export-pdf',
+      type: 'glean-add-menu',
+      metadata: { label: 'Export as PDF', icon: 'export' }
+    });
+    window.GleanBridge?.onMessage?.('action', function(data) {
+      if (data.actionId === 'export-pdf') window.print();
+    });
+  </script>
+</body>
+</html>
